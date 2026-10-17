@@ -1,5 +1,5 @@
 ##
-# Security Check v2.0
+# Security Check v2.0.1
 #  by MC_8 - Carl M. Gregory <mc8@purehype.net>
 #  This script will only run on eggdrop 1.6.13 or greater.
 #
@@ -62,9 +62,9 @@ foreach {temp(name) temp(value)} [array get mc_secchk :config:*] {
 set mc_secchk(info:loc) [info script]
 array set mc_secchk [list \
   script                 "Security Check" \
-  version                "v2.0" \
+  version                "v2.0.1" \
   svs:script             "security_check" \
-  svs:version            "002000000000" \
+  svs:version            "002000001000" \
   svs:client_version     "v4.0" \
   svs:client_svs_version "004000000000" \
   svs:server             "mc.svs.purehype.net" \
@@ -123,7 +123,7 @@ proc mc:secchk:errchk {command arg} {
 # ^
 
 utimer 1 [list \
-  mc:secchk:list bind dcc $mc_secchk(:config:dcc_access) security_chk \
+  mc:secchk:list bind dcc $mc_secchk(:config:dcc_access) security_check \
   mc:secchk:dcc:security_check rebind]
 proc mc:secchk:dcc:security_check {handle index arg} {
   return [mc:secchk:errchk \
@@ -214,9 +214,10 @@ proc mc:secchk:list_ {command arg} {
         set others [list]
         foreach host [getuser $user HOSTS] {
           set host [split $host !]
-          set nick [lindex $host 0]
+          set nick [string trim [lindex $host 0] ?*]
           set uhost [split [lindex $host 1] @]
           set ident [join [lrange $uhost 0 [expr [llength $uhost]-2]] @]
+          set ident [string trim $ident ?*]
           if {![string match {*[\*\?]*} $nick]} {lappend others $nick}
           if {![string match {*[\*\?]*} $ident]} {lappend others $ident}
         }
@@ -640,6 +641,13 @@ putloglev o * "$mc_secchk(script) $mc_secchk(version) by MC_8 loaded."
 ##
 # History  ( <Fixed by> - [Found by] - <Info> )
 ##
+# v2.0.1 [05.24.03]
+#  MC_8      - - Stripping * and ?'s from left and right of ident's from valid
+#                hosts per user when using that to see if the user's ident is
+#                his/her password.
+#  MaSsKilla - - Was binding dcc command to 'security_chk' rather than
+#                'security_check'.
+#
 # v2.0 [05.24.03]
 #  MC_8 - - Rewrote entire script.
 #
