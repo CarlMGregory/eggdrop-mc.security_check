@@ -1,12 +1,15 @@
 ##
-# Security Check v2.0.1
+# Security Check v2.0.2
 #  by MC_8 - Carl M. Gregory <mc8@purehype.net>
-#  This script will only run on eggdrop 1.6.13 or greater.
+#  This script will only run on eggdrop 1.6.14 or greater.
 #
 #    R.I.P. Mom, To always be remembered; Nancy Marie Gregory.
 #
 # My Website - http://mc.purehype.net/
-# Have a bug?  http://mc.purehype.net/bugzilla/
+# Have a bug, script not working correctly, or just an idea?
+#   http://mc.purehype.net/bugzilla/
+# Have a question?
+#   http://forum.purehype.net/viewforum.php?f=5
 ##
 
 ##
@@ -36,12 +39,14 @@
 #           "n"  This means only those who have the n flag, owner.
 set mc_secchk(:config:dcc_access) "t"
 
-## SVS Client (Script Version Service) v4.0.1 ##
+## SVS Client (Script Version Service) v4.1.2 ##
 # Once a day, the SVS Client will connect to MC_8's SVS Server to determine if
 # there is a newer version of this script available.  If a newer version is
 # found, the script will be auto updated.
 
-# [0=no/1=yes] Do you want to enable auto updating?
+# [0=no/1=yes] Do you want to enable auto updating?  If you chose to disable
+# auto updating, it will not automatically update the script upon finding a
+# newer version.
 set mc_secchk(:config:svs:enable) 1
 
 #
@@ -52,9 +57,15 @@ set mc_secchk(:config:svs:enable) 1
 ##
 #
 
+## SVS insert (pre code)
 #Script:mc_secchk
-
 catch {unset temp}
+
+foreach temp(bind) [binds mc:secchk:*] {
+  foreach {temp(1) temp(2) temp(3) temp(4) temp(5)} $temp(bind) break
+  catch {unbind $temp(1) $temp(2) $temp(3) $temp(5)}
+}
+
 set mc_secchk(info:vars) ""
 foreach {temp(name) temp(value)} [array get mc_secchk :config:*] {
   lappend mc_secchk(info:vars) [list $temp(name) $temp(value)]
@@ -62,25 +73,34 @@ foreach {temp(name) temp(value)} [array get mc_secchk :config:*] {
 set mc_secchk(info:loc) [info script]
 array set mc_secchk [list \
   script                 "Security Check" \
-  version                "v2.0.1" \
+  version                "v2.0.2" \
   svs:script             "security_check" \
-  svs:version            "002000001000" \
-  svs:client_version     "v4.0" \
-  svs:client_svs_version "004000000000" \
+  svs:version            "002000002000" \
+  svs:client_version     "v4.1.2" \
+  svs:client_svs_version "004001002000" \
   svs:server             "mc.svs.purehype.net" \
-  svs:port               "81" \
+  svs:port               "80" \
   svs:get                "/index.tcl"]
 set mc_secchk(svs:query)    "svs=$mc_secchk(svs:script)&"
 append mc_secchk(svs:query) "version=$mc_secchk(svs:version)&"
-append mc_secchk(svs:query) "svs_version=$mc_secchk(svs:client_svs_version)"
+append mc_secchk(svs:query) \
+  "svs_version=$mc_secchk(svs:client_svs_version)"
 
-if {![info exists numversion] || ($numversion < "1061300")} {
+if {![info exists numversion] || 
+    ([string range $numversion 0 4] < "10614") ||
+    (([string range $numversion 0 4] == "10614") &&
+     ([string range $numversion 5 6] != "00"))} {
   set temp(tag) "$mc_secchk(script) $mc_secchk(version)"
- putloglev o * "$temp(tag) by MC_8 will only work on eggdrop 1.6.13 or greater."
- putloglev o * "$temp(tag)  will not work with eggdrop $version."
- putloglev o * "$temp(tag)  not loaded."
-  return 1
+  putloglev o * \
+    "$temp(tag) by MC_8 will only work on eggdrop 1.6.14 (stable) or greater."
+  putloglev o * "$temp(tag) will not work with eggdrop $version."
+  putloglev o * "$temp(tag) not loaded."
+  uplevel #0 {
+    if {[info exists temp] && ![array exists temp]} {unset temp}
+    set temp(svs_return) [list 0 "Need to upgrade eggdrop."]
+  }; return 1
 }
+## ^
 
 # Configuration variable sanity.
 foreach {temp(a) temp(b)} [list :config:dcc_access     "t"] {
@@ -93,41 +113,112 @@ if {$mc_secchk(:config:dcc_access) == ""} {
 }
 #
 
-# Error system, v3.0
-proc mc:secchk:error {command error arg} {
-  global mc_secchk version lastbind errorInfo
-  putloglev o * "Error in script $mc_secchk(script) $mc_secchk(version)."
-  putloglev o * "    Error System: v3.0"
-  putloglev o * \
-    "       Last Bind: [expr {[info exists lastbind]?$lastbind:"-NULL-"}]"
-  putloglev o * "         Command: $command"
-  putloglev o * "       Arguments: $arg"
-  putloglev o * "       Error Msg: $error"
-  putloglev o * \
-    "    Egg. Version: [expr {[info exists version]?$version:"-NULL-"}]"
-  putloglev o * "     TCL Version: [info tclversion]"
-  putloglev o * "  TCL Patchlevel: [info patchlevel]"
-  putloglev o * "*** Please submit this bug so MC_8 can fix it.  Visit"
-  putloglev o * \
-    "*** http://mc.purehype.net/bugzilla/ to properly report the bug."
-  putloglev o * \
-    "*** Please include ALL info. in the bug report, including the next(s)."
-  error $errorInfo
-}
+# Error Catching System (ECS), v4.1.
+proc mc:secchk:errchk {command args} {
+  
+  # Enable (1) or disable (0) auto reporting of bugs to mc8@purehype.net.
+  # This setting here for those who want to disable it in fear of privacy
+  # violations.
+  set enable_auto_reporting 1
+  
+  if {![info exists ::lastCommand]} {set ::lastCommand [list]}
+  set ::lastCommand \
+    "[list [list [clock seconds] $command $args]] $::lastCommand"
+  set ::lastCommand [lrange $::lastCommand 0 4]
+  if {![catch {eval $command $args} return]} {return $return}
+  if {$::errorCode == "mc.ecs.done"} {return -errorcode mc.ecs.done -code error}
+  
+  set temp(lastbind) [expr {[info exists ::lastbind]?$::lastbind:"-NULL-"}]
+  set temp(eversion) [expr {[info exists ::version]?$::version:"-NULL-"}]
+  set message "
+    ************************************
+    (ECS 4.1) Error found in TCL script.
+    --------------
+    Script name   : $::mc_secchk(script)
+    Script version: $::mc_secchk(version)
+    Egg. Version  : $temp(eversion)
+    TCL Version   : [info tclversion] ([info patchlevel])
+    --------------
+    Last Bind     : $temp(lastbind)
+    Last Commands :"
+  foreach line $::lastCommand {
+    foreach {time command arg} $line break
+    append message "\n        ${time}- $command $arg"
+  }
+  append message "\n    Error stack   :"
+  foreach line [split $::errorInfo \n] {
+    append message "\n        $line"
+  }
+  append message "\n    --------------"
+  
+  set message [lrange [split $message \n] 1 end]
+  set offset [string first * [lindex $message 0]]
+  set new_message [list]
+  foreach line $message {lappend new_message [string range $line $offset end]}
+  set message $new_message
+  
+  if {!$enable_auto_reporting ||
+      [catch {socket -async mc.purehype.net 80} sid]} {
+    foreach line $message {putloglev o * $line}
+    putloglev o * "Submit this bug to http://mc.purehype.net/bugzilla/ . If"
+    putloglev o * "you are experiencing problems with bugzilla, contact MC_8"
+    putloglev o * "via email at mc8@purehype.net. Please include all"
+    putloglev o * "information shown here, in this ECS report."
+    putloglev o * "************************************"
+    return -errorcode mc.ecs.done -code error
+  }
+  fconfigure $sid -blocking 0 -buffering line
 
-proc mc:secchk:errchk {command arg} {
-  if {![catch {eval $command $arg} return]} {return $return}
-  mc:secchk:error $command $return $arg
-  return 0
+  set query [list]
+  # This info is passed should I need to hunt down the bot's owner for more
+  # information.
+  lappend query "Admin   : [expr {[info exists ::admin]?$::admin:""}]"
+  lappend query "Owner   : [expr {[info exists ::owner]?$::owner:""}]"
+  lappend query "Botnick : [expr {[info exists ::botnick]?$::botnick:""}]"
+  lappend query "Server  : [expr {[info exists ::server]?$::server:""}]"
+  lappend query "Channels: [join [lsort -dictionary [channels]] ", "]"
+  lappend query ""
+  
+  foreach line $message {lappend query $line}
+  lappend query "************************************"
+  
+  set new_query [list]
+  foreach line $query {
+    regsub -all -- "(\002|\017|\026|\037)" $line "" line
+    regsub -all -- "\003(\[0-9\]\[0-9\]?(,\[0-9\]\[0-9\]?)?)?" $line "" line
+    regsub -all {\%} $line "%25" line
+    set i [string length $line]
+    while {[regexp {[^a-zA-Z0-9%]} $line toh] && ($i >= 0)} {
+      scan "$toh" %c dec
+      regsub -all -- "\\${toh}" $line "%[format %X $dec]" line
+      incr i -1
+    }; lappend new_query $line
+  }; set query $new_query
+  
+  set query "message=[join $query %0a]"
+  puts $sid "POST /report_bug.tcl HTTP/1.0\
+           \nHost: mc.purehype.net:80\
+           \nContent-type: application/x-www-form-urlencoded\
+           \nContent-Length: [expr [string length $query] +2]"
+  puts $sid \n$query
+  close $sid
+
+  foreach line $message {putloglev o * $line}
+  putloglev o * "Automatically sending bug report to MC_8."
+  putloglev o * "If you have a firewall setup, it may block the sending of this"
+  putloglev o * "report. You can check the status of your bug, as soon as MC_8"
+  putloglev o * "adds it, at http://mc.purehype.net/bugzilla/ ."
+  putloglev o * "************************************"
+  
+  return -errorcode mc.ecs.done -code error
 }
 # ^
 
-utimer 1 [list \
+utimer 2 [list \
   mc:secchk:list bind dcc $mc_secchk(:config:dcc_access) security_check \
   mc:secchk:dcc:security_check rebind]
 proc mc:secchk:dcc:security_check {handle index arg} {
-  return [mc:secchk:errchk \
-    mc:secchk:dcc:security_check_ [list $handle $index $arg]]
+  return [mc:secchk:errchk mc:secchk:dcc:security_check_ $handle $index $arg]
 }
 proc mc:secchk:dcc:security_check_ {handle index arg} {
   mc:secchk:list security_check $handle $index $arg
@@ -135,7 +226,7 @@ proc mc:secchk:dcc:security_check_ {handle index arg} {
 }
 
 proc mc:secchk:list {command {args ""}} {
-  return [mc:secchk:errchk mc:secchk:list_ [list $command $args]]
+  return [mc:secchk:errchk mc:secchk:list_ $command $args]
 }
 proc mc:secchk:list_ {command arg} {
   global mc_secchk
@@ -192,9 +283,7 @@ proc mc:secchk:list_ {command arg} {
           }
 
           if {($host == "*") ||
-              (([string index $host end] == "*") &&
-               (($ident == "*") && ($nick == "*"))) ||
-              (([maskhost $host] == "*!*@$host") &&
+              (([string match {*[*?]*} $host]) &&
                (($ident == "*") && ($nick == "*")))} {
             putdcc $index "  Security Risk; $user has host: $ohost"
             incr risks
@@ -232,7 +321,7 @@ proc mc:secchk:list_ {command arg} {
             }
           }; lappend others $ircnick
         }
-        foreach try "[list $user password [hand2nick $user]] $others" {
+        foreach try "[list $user password] $others" {
           if {[passwdok $user $try]} {
             putdcc $index "  Security Risk; $user's password is $try."
             incr risks
@@ -274,8 +363,9 @@ proc mc:secchk:list_ {command arg} {
         putdcc $index "Current global ops: [join $global_ops ", "]"
       }
 
+      set tot [duration [expr [clock seconds]-$start_time]]
       putdcc $index ""
-      putdcc $index "Security checks complete.  Total risks: $risks"
+      putdcc $index "Security checks complete, took $tot.  Total risks: $risks"
     }
 
     "bind" {
@@ -381,6 +471,9 @@ proc mc:secchk:unlist {{args ""}} {
 ##
 
 proc mc:secchk:help {index name} {
+  return [mc:secchk:errchk mc:secchk:help_ $index $name]
+}
+proc mc:secchk:help_ {index name} {
   global mc_secchk
   switch -- $name {
     "mc.security_check" {
@@ -453,13 +546,16 @@ proc mc:secchk:help {index name} {
 }
 
 catch {unset name}
-utimer 1 [list mc:secchk:list unbind mc:secchk:filt:help]
+utimer 2 [list mc:secchk:list unbind mc:secchk:filt:help]
 foreach name [set mc_secchk(:help:list) [list \
   "mc.security_check" "security_check"]] {
   utimer 2 [list \
     bind filt $mc_secchk(:config:dcc_access) ".help $name" mc:secchk:filt:help]
 }
 proc mc:secchk:filt:help {index text} {
+  return [mc:secchk:errchk mc:secchk:filt:help_ $index $text]
+}
+proc mc:secchk:filt:help_ {index text} {
   global mc_secchk
   set name [string tolower [join [lrange [split $text] 1 end]]]
   if {[lsearch -exact $mc_secchk(:help:list) $name] > -1} {
@@ -486,34 +582,52 @@ proc mc:secchk:do_svs {{args ""}} {
   global mc_secchk
   set query $mc_secchk(svs:query)
   if {$args == ""} {append query "&log=0"}
-  set index [connect $mc_secchk(svs:server) $mc_secchk(svs:port)]
-  putdcc $index "GET $mc_secchk(svs:get)?$query HTTP/1.0\n"
-  putdcc $index "Host: $mc_secchk(svs:server):$mc_secchk(svs:port)\n\n"
-  control $index mc:secchk:svs_talk
+  if {[catch {connect $mc_secchk(svs:server) $mc_secchk(svs:port)} ind]} {
+    set temp(1) "SVS problem connecting to $mc_secchk(svs:server)"
+    set temp(2) "on port $mc_secchk(svs:port)"
+    putloglev d * "$mc_secchk(script): $temp(1) $temp(2):  $ind"
+    return 0
+  }
+  putdcc $ind "GET $mc_secchk(svs:get)?$query HTTP/1.0\n"
+  putdcc $ind "Host: $mc_secchk(svs:server):$mc_secchk(svs:port)\n\n"
+  control $ind mc:secchk:svs_talk
+}
+
+proc mc:secchk:svs_memory {action} {
+  global mc_secchk
+  switch -- $action {
+    
+    "setup" {
+      upvar index index
+      foreach _item [list header memory rfc_memory] {
+        upvar $_item $_item
+        set $_item [list svs $_item $index]
+      }
+    }
+    
+    "remove" {
+      upvar index index
+      mc:secchk:svs_memory setup
+      catch {unset mc_secchk($header)}
+      catch {unset mc_secchk($memory)}
+      foreach _item [array names mc_secchk $rfc_memory:*] {unset mc_secchk($_item)}
+    }
+
+  }
 }
 
 proc mc:secchk:svs_talk {index text} {
   global mc_secchk
-  set header [list svs header $index]
-  set memory [list svs memory $index]
+  mc:secchk:svs_memory setup
   if {$text == ""} {
-    catch {unset mc_secchk($header)}
-    catch {unset mc_secchk($memory)}
+    mc:secchk:svs_memory remove
     return 1
   }
   set text [split $text]
   set rfc [lindex $text 0]
   set text [join [lrange $text 1 end]]
-  if {![info exist mc_secchk($header)]} {
-    if {$rfc == "002"} {
-      # Done with http header and useless information.
-      if {!$mc_secchk(:config:svs:enable)} {
-        catch {unset mc_secchk($header)}
-        catch {unset mc_secchk($memory)}
-        return 1
-      }
-      set mc_secchk($header) 1
-    }
+  if {![info exists mc_secchk($header)]} {
+    if {$rfc == "002"} {set mc_secchk($header) 1}
     return 0
   }
   switch -- $rfc {
@@ -524,22 +638,61 @@ proc mc:secchk:svs_talk {index text} {
 
     010 {
       if {$text != $mc_secchk(svs:script)} {
-        set temp(1) "wanted $mc_secchk(svs:script), got $temp(text:0)"
+        set temp(1) "wanted $mc_secchk(svs:script), got $text"
         putloglev d * "$mc_secchk(script): SVS Error: $temp(1)"
-        catch {unset mc_secchk($header)}
-        catch {unset mc_secchk($memory)}
+        mc:secchk:svs_memory remove
         return 1
       }
+      if {$mc_secchk(:config:svs:enable)} {return 0}
+      set mc_secchk($rfc_memory:[string index $rfc end]) $text
       return 0
     }
 
-    011 {return 0}
-    012 {return 0}
-    013 {return 0}
-    014 {return 0}
-    017 {return 0}
+    011 {
+      if {$mc_secchk(:config:svs:enable)} {return 0}
+      set mc_secchk($rfc_memory:[string index $rfc end]) $text
+      return 0
+    }
+      
+    012 {
+      if {$mc_secchk(:config:svs:enable)} {return 0}
+      set mc_secchk($rfc_memory:[string index $rfc end]) $text
+      return 0
+    }
+    
+    013 {
+      if {$mc_secchk(:config:svs:enable)} {return 0}
+      set mc_secchk($rfc_memory:[string index $rfc end]) $text
+      return 0
+    }
+    
+    014 {
+      if {$mc_secchk(:config:svs:enable)} {return 0}
+      set mc_secchk($rfc_memory:[string index $rfc end]) $text
+      return 0
+    }
+    
+    017 {
+      if {$mc_secchk(:config:svs:enable)} {return 0}
+      if {$text == ""} {
+        set text "Newer version of this script exists."
+      }
+      foreach number [list 0 1 2 3 4] {
+        if {![info exists mc_secchk($rfc_memory:$number)]} {continue}
+        regsub -all -- %$number $text $mc_secchk($rfc_memory:$number) text
+      }
+      putloglev o * "SVS, $mc_secchk(script): $text"
+      mc:secchk:svs_memory remove
+      return 1
+    }
 
     004 {
+      # Quit.
+      if {!$mc_secchk(:config:svs:enable)} {
+        mc:secchk:svs_memory remove
+        return 1
+      }
+        
       if {[info exists mc_secchk($memory)]} {
         set file $mc_secchk(info:loc)~new
         set temp(vars) $mc_secchk(info:vars)
@@ -553,12 +706,13 @@ proc mc:secchk:svs_talk {index text} {
               set item_name [lindex $item 0]
               set item_value [lindex $item 1]
               if {$name != $item_name} {continue}
-              set index [lsearch -exact $temp(vars) $item]
-              set temp(vars) [lreplace $temp(vars) $index $index]
+              set lsearch_index [lsearch -exact $temp(vars) $item]
+              set temp(vars) \
+                [lreplace $temp(vars) $lsearch_index $lsearch_index]
               puts $io [list set mc_secchk($name) $item_value]
               if {$type == "\{"} {
                 while {1} {
-                  if {[regexp -- {\}(?:;* *(.*))?} $line -> extra]} {
+                  if {[regexp -- {\}(?:[; ][; ]*(.*))?} $line -> extra]} {
                     if {$extra != ""} {
                       puts $io $extra
                     }
@@ -571,8 +725,8 @@ proc mc:secchk:svs_talk {index text} {
               } elseif {$type == "\""} {
                 regsub -- {"} $line "" line
                 while {1} {
-                  if {[regexp -- {[^\\]"(?:;* *(.*))?} $line -> extra] ||
-                      [regexp -- {^"(?:;* *(.*))?} $line -> extra]} {
+                  if {[regexp -- {[^\\]"(?:[; ][; ]*(.*))?} $line -> extra] ||
+                      [regexp -- {^"(?:[; ][; ]*(.*))?} $line -> extra]} {
                     if {$extra != ""} {
                       puts $io $extra
                     }
@@ -593,20 +747,45 @@ proc mc:secchk:svs_talk {index text} {
         close $io
         set file $mc_secchk(info:loc)
         putloglev o * "$mc_secchk(script): Auto update testing new script..."
-        if {[catch {uplevel "source $file~new"} error]} {
+        if {[catch {uplevel "source $file~new"}]} {
           file delete -force -- $file~new
-          putloglev o * "$mc_secchk(script): Auto update failed: $error"
-          putloglev o * "$mc_secchk(script): Auto update loading previous script."
+          putloglev o * "$mc_secchk(script): Auto update failed:"
+          putloglev o * $::errorInfo
+          putloglev o * \
+            "$mc_secchk(script): Loading previous script version..."
           uplevel "source $file"
         } else {
-          file rename -force -- $file~new $file
-          putloglev o * "$mc_secchk(script): Auto update test good, reloading."
-          uplevel "source $file"
+          upvar #0 temp upvar_temp
+          if {[info exists upvar_temp(svs_return)]} {
+            set temp(return_code) [lindex $upvar_temp(svs_return) 0]
+            set temp(return_arg) [lindex $upvar_temp(svs_return) 1]
+            
+            if {!$temp(return_code)} {
+              file delete -force -- $file~new
+              set temp() "message from new version: $temp(return_arg)"
+              putloglev o * "$mc_secchk(script): Auto update failed, $temp()"
+              putloglev o * \
+                "$mc_secchk(script): Loading previous script version..."
+              uplevel "source $file"
+            } else {
+              file rename -force -- $file~new $file
+              set temp() "good, message from new version: $temp(return_arg)"
+              putloglev o * "$mc_secchk(script): Auto update test $temp()"
+              putloglev o * \
+                "$mc_secchk(script): Moving and reloading new version..."
+              uplevel "source $file"
+            }
+          } else {
+            file rename -force -- $file~new $file
+            putloglev o * "$mc_secchk(script): Auto update test good."
+            putloglev o * \
+              "$mc_secchk(script): Moving and reloading new version..."
+            uplevel "source $file"
+          }
         }
       }
 
-      catch {unset mc_secchk($header)}
-      catch {unset mc_secchk($memory)}
+      mc:secchk:svs_memory remove
       return 1
     }
 
@@ -617,30 +796,40 @@ proc mc:secchk:svs_talk {index text} {
       set temp(cache) "$temp(host) at $temp(port)"
       putloglev d * \
         "$mc_secchk(script): SVS is being redirected to $temp(cache)."
-      utimer 5 [list mc:secchk:do_svs_ $temp(host) $temp(port) $temp(get)]
-      catch {unset mc_secchk($header)}
-      catch {unset mc_secchk($memory)}
+      utimer 6 [list mc:secchk:do_svs_ $temp(host) $temp(port) $temp(get)]
+      mc:secchk:svs_memory remove
       return 1
     }
 
     300 {
-      lappend mc_secchk($memory) $text
-      return 0
+      if {$mc_secchk(:config:svs:enable)} {
+        lappend mc_secchk($memory) $text
+      }; return 0
     }
 
   }
 }
 catch {unset index}
-if {![info exists mc_loaded]} {set mc_loaded(scripts) ""}
+if {![info exists mc_loaded]} {set mc_loaded(scripts) [list]}
+if {![array exists mc_loaded]} {unset mc_loaded; set mc_loaded(scripts) [list]}
 set index [lsearch -exact $mc_loaded(scripts) mc_secchk]
-lreplace mc_loaded(scripts) $index $index mc_secchk
+set mc_loaded(scripts) [lreplace $mc_loaded(scripts) $index $index mc_secchk]
 ## ^
 
 putloglev o * "$mc_secchk(script) $mc_secchk(version) by MC_8 loaded."
 
+#
+##
+
 ##
 # History  ( <Fixed by> - [Found by] - <Info> )
 ##
+# v2.0.2 [10.26.03]
+#  MC_8 - - Upgraded ECS.  v3.0 -> v4.1
+#  MC_8 - - Upgraded SVS Client.  v4.0.1 -> v4.1.2
+#  MC_8 - - Made script more Limbo friendly.
+#  MC_8 - - Added time took to the ending of security check.
+#
 # v2.0.1 [05.24.03]
 #  MC_8      - - Stripping * and ?'s from left and right of ident's from valid
 #                hosts per user when using that to see if the user's ident is
